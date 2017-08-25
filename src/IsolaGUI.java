@@ -21,6 +21,7 @@ public class IsolaGUI extends JPanel
 		this.game = game;
 	}
 
+	//Sets up GUI framework
 	void setupGUI()
 	{
 		JFrame mainWindow = new JFrame("Isola");
