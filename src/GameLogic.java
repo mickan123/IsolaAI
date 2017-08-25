@@ -11,20 +11,20 @@ public class GameLogic
 	final static int dydx[] = {1,6,7,8}; 
 
 	//Checks if the game is finished
-	static boolean gameOver(long board, long playerPos, long aiPos)
+	static boolean gameOver(long board, long playerOnePos, long playerTwoPos)
 	{
 		
 		boolean noMovesPlayer = true;
 		boolean noMovesAI = true;
 		for (int i=0; i<4; i++)
 		{
-			if (validMove(board, true, playerPos >>> dydx[i], playerPos, aiPos)
-				|| validMove(board, true, playerPos << dydx[i], playerPos, aiPos))
+			if (validMove(board, true, playerOnePos >>> dydx[i], playerOnePos, playerTwoPos)
+				|| validMove(board, true, playerOnePos << dydx[i], playerOnePos, playerTwoPos))
 			{
 				noMovesPlayer = false;
 			}
-			if (validMove(board, false, aiPos >>> dydx[i], playerPos, aiPos)
-				|| validMove(board, false, aiPos << dydx[i], playerPos, aiPos))
+			if (validMove(board, false, playerTwoPos >>> dydx[i], playerOnePos, playerTwoPos)
+				|| validMove(board, false, playerTwoPos << dydx[i], playerOnePos, playerTwoPos))
 			{
 				noMovesAI = false;
 			}
@@ -33,19 +33,19 @@ public class GameLogic
 	}
 
 	//Returns 1 if player one wins, 2 if player two wins, 0 if draw
-	static int gameWinner(long board, long playerPos, long aiPos)
+	static int gameWinner(long board, long playerOnePos, long playerTwoPos)
 	{
 		boolean noMovesPlayer = true;
 		boolean noMovesAI = true;
 		for (int i=0; i<4; i++)
 		{
-			if (validMove(board, true, playerPos >>> dydx[i], playerPos, aiPos)
-				|| validMove(board, true, playerPos << dydx[i], playerPos, aiPos))
+			if (validMove(board, true, playerOnePos >>> dydx[i], playerOnePos, playerTwoPos)
+				|| validMove(board, true, playerOnePos << dydx[i], playerOnePos, playerTwoPos))
 			{
 				noMovesPlayer = false;
 			}
-			if (validMove(board, false, aiPos >>> dydx[i], playerPos, aiPos)
-				|| validMove(board, false, aiPos << dydx[i], playerPos, aiPos))
+			if (validMove(board, false, playerTwoPos >>> dydx[i], playerOnePos, playerTwoPos)
+				|| validMove(board, false, playerTwoPos << dydx[i], playerOnePos, playerTwoPos))
 			{
 				noMovesAI = false;
 			}
@@ -58,18 +58,18 @@ public class GameLogic
 	}
 
 	//Returns if a move is valid
-	static boolean validMove(long board, boolean playerTurn, long move, long playerPos, long aiPos)
+	static boolean validMove(long board, boolean playerTurn, long move, long playerOnePos, long playerTwoPos)
 	{
 
 		if ((board & move) != 0 //Check if valid spot to move to
-			|| (move & playerPos) != 0 //Check if move doesn't overlap with playerPos
-			|| (move & aiPos) != 0 //Check if move doesn't overlap with aiPos
+			|| (move & playerOnePos) != 0 //Check if move doesn't overlap with playerOnePos
+			|| (move & playerTwoPos) != 0 //Check if move doesn't overlap with playerTwoPos
 			|| 	Long.bitCount(move) != 1)  //Check only 1 bit set
 		{
 			return false;
 		}
 
-		long curPlayerPos = (playerTurn) ? playerPos : aiPos;
+		long curPlayerPos = (playerTurn) ? playerOnePos : playerTwoPos;
 		
 		int curPlayerBitVal = 64 - Long.numberOfLeadingZeros(curPlayerPos); 
 		int moveBitVal = 64 - Long.numberOfLeadingZeros(move); 
@@ -86,11 +86,11 @@ public class GameLogic
 	}
 
 	//Returns if removing a certain piece is valid
-	static boolean validRemove(long board, long remove, long playerPos, long aiPos)
+	static boolean validRemove(long board, long remove, long playerOnePos, long playerTwoPos)
 	{	
 		if 	((remove & board) != 0 //Check if already removed and in 7x7 grid
-			|| 	(remove & playerPos) != 0 //Check if player is on piece
-			|| 	(remove & aiPos) != 0 //Check if  ai is on piece
+			|| 	(remove & playerOnePos) != 0 //Check if player is on piece
+			|| 	(remove & playerTwoPos) != 0 //Check if  ai is on piece
 			|| 	Long.bitCount(remove) != 1) //Check that we are only removing 1 piece
 		{
 			return false;
@@ -110,14 +110,14 @@ public class GameLogic
 	}
 
 	//Prints board to stdout, useful for debugging
-	static void printBoard(long gameBoard, long playerPos, long aiPos)
+	static void printBoard(long gameBoard, long playerOnePos, long playerTwoPos)
 	{
 		//Holds chars to print according to bit values
 		char array[] = new char[49];
 
 		long boardIter = gameBoard >>> 15;
-		long playerIter = playerPos >>> 15;
-		long aiIter = aiPos >>> 15;
+		long playerIter = playerOnePos >>> 15;
+		long aiIter = playerTwoPos >>> 15;
 
 		//Fill up array with values according to
 		//board and player bit values

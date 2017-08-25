@@ -11,34 +11,68 @@ public class Isola extends JPanel
 	final static long initBoardState = 0x0000000000007FFFL;
 	final static long playerOneStartPos = 0x1000000000000000L;
 	final static long playerTwoStartPos = 0x0000000000040000L;
-	final static int aiTurnTime = 3000;
+	final static int aiTurnTime = 3000; 
+	final static int maxDepth = 20; //Max depth willing to search
 
-	//Represent board as 64 bit value
+	//Represent board and player positions as 64 bit values 
 	//First 7 x 7 bits are zero to represent board spots
-	long board = initBoardState;
+	private long board = initBoardState;
+	private long playerOnePos = playerOneStartPos;
+	private long playerTwoPos = playerTwoStartPos;
 
-	//True if it's the players turn
-	boolean playerTurn; 
-	boolean playVSai;
+	//Gametype and player turn booleans
+	private boolean playerOneTurn; 
+	private boolean playVSai;
+	private boolean aiVSai;
+	private boolean playVSplay;
 
-	//Keep track of Player and AI pos
-	long playerPos = playerOneStartPos;
-	long aiPos = playerTwoStartPos;
+	//AI logic class
+	private IsolaAI ai;	
 
 	//GUI variables
 	private JButton boardButtons[][] = new JButton[7][7]; 
-	private JButton playerButton;
-	private JButton aiButton;
+	private JButton playerOneButton;
+	private JButton playerTwoButton;
 	private boolean waitingForMove = true;
 
-	volatile SharedVariable searchMoves;
-
-	Isola(boolean turn, boolean playVSai)
+	Isola()
 	{	
-		searchMoves = new SharedVariable(true);
-		this.playerTurn = turn;
+		playerOneTurn = true;
+		aiVSai = false;
+		playVSai = false;
+		playVSplay = false;
 		setLayout(new GridLayout(7,7));
 		setupGUI();
+		ai = new IsolaAI();
+	}
+
+	public void startGame()
+	{
+		Object[] options = {"Player vs Player", "Player vs AI", "AI vs AI"};
+		int choice = JOptionPane.showOptionDialog(null, "Choose a Game Type", "", 
+												JOptionPane.YES_NO_CANCEL_OPTION,
+												JOptionPane.QUESTION_MESSAGE,
+												null, 
+												options, 
+												"Player vs Player");
+		if (choice == 0) playVSplay = true;
+		else if (choice == 1) playVSai = true;
+		else if (choice == 2) aiVSai = true;
+
+		if (aiVSai)
+		{
+			new Thread(new Runnable()
+			{
+				public void run()
+				{
+					long start = System.nanoTime();
+					aiTurn();
+					long end = System.nanoTime();
+					long difference = (end-start)/1000000;
+					System.out.println("Time for move: " + difference + "ms");
+				}
+			}).start();
+		}
 	}
 
 	public static void main(String[] args)
@@ -47,7 +81,9 @@ public class Isola extends JPanel
 		mainWindow.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		mainWindow.setSize(800,800);
 		mainWindow.setVisible(true);
-		mainWindow.getContentPane().add(new Isola(true, true));
+		Isola game = new Isola();
+		mainWindow.getContentPane().add(game);
+		game.startGame();
 	}
 
 	void setupGUI()
@@ -64,8 +100,8 @@ public class Isola extends JPanel
 		}
 		boardButtons[0][3].setText("A");
 		boardButtons[6][3].setText("P");
-		playerButton = boardButtons[6][3];
-		aiButton = boardButtons[0][3];
+		playerOneButton = boardButtons[6][3];
+		playerTwoButton = boardButtons[0][3];
 	}
 
 	//Returns the buttonID corresponding to the button object
@@ -93,32 +129,42 @@ public class Isola extends JPanel
 			int buttonID = getButtonID(buttonClicked);
 			long x = buttonID/7 + 1;
 			long y = buttonID%7 + 1;
-			if (playerTurn && waitingForMove)
+			if (waitingForMove && ((playerOneTurn && playVSai) || playVSplay))
 			{
 				long movePos = GameLogic.convertCoords(x, y);
-				if (GameLogic.validMove(board, playerTurn, movePos, playerPos, aiPos))
+				if (GameLogic.validMove(board, playerOneTurn, movePos, playerOnePos, playerTwoPos))
 				{
-					buttonClicked.setText("P");
-					playerButton.setText("");
-					playerButton = buttonClicked;
-					playerPos = movePos;
+					if (playerOneTurn)
+					{
+						buttonClicked.setText("P");
+						playerOneButton.setText("");
+						playerOneButton = buttonClicked;
+						playerOnePos = movePos;
+					}
+					else
+					{
+						buttonClicked.setText("A");
+						playerTwoButton.setText("");
+						playerTwoButton = buttonClicked;
+						playerTwoPos = movePos;
+					}
 					waitingForMove = false;
 				} 
 			}
-			else if (playerTurn && !waitingForMove)
+			else if (!waitingForMove && ((playerOneTurn && playVSai) || playVSplay))
 			{
 				long removePos = GameLogic.convertCoords(x, y);
-				if (GameLogic.validRemove(board, removePos, playerPos, aiPos))
+				if (GameLogic.validRemove(board, removePos, playerOnePos, playerTwoPos))
 				{
 					buttonClicked.setBackground(Color.BLACK);
 					board += removePos;
-					playerTurn = false;
+					playerOneTurn = !playerOneTurn;
 					waitingForMove = true;
-					if (GameLogic.gameOver(board, playerPos, aiPos))
+					if (GameLogic.gameOver(board, playerOnePos, playerTwoPos))
 					{
 						gameOver();
 					} 
-					else
+					else if (playVSai)
 					{
 						//Run AI turn
 						new Thread(new Runnable()
@@ -138,61 +184,53 @@ public class Isola extends JPanel
 		}
 	}
 
+	//Iterative deepening search thread that runs for set time
+	class aiCalculateMove implements Callable<GameState>
+	{
+		public GameState call()
+		{
+			int initialDepth = 3;
+			GameState returnState = new GameState(board, playerOneTurn, playerOnePos, playerTwoPos, 0, initialDepth);
+			GameState myState = new GameState(returnState);
+			while (true)
+			{
+				GameState tempState = new GameState(ai.calculateBestMove(myState, -10000, 10000));
+				if (ai.searchMoves && myState.maxDepth < maxDepth)
+				{
+					returnState = new GameState(tempState);
+				} 
+				else break;
+				System.out.println("Depth: " + myState.maxDepth);
+				myState.maxDepth++;
+			}
+			return returnState;
+		}
+	}
+
 	//Executes the ai turn, calculations are done for amount of time defined by aiTurnTime class variable
 	void aiTurn()
 	{	
-		GameState curState = new GameState(board, playerTurn, playerPos, aiPos, 0, 5);
-		
-		//GameState nextState = new GameState(new IsolaAI(searchMoves).calculateBestMove(curState, -1000, 1000));
-		GameState nextState = new GameState(curState);
-		
-		final int maxDepth = 20;
-
-		//Iterative deepening search that runs for set time
-		class aiCalculateMove implements Callable<GameState>
-		{
-			volatile SharedVariable moveCache;
-
-			aiCalculateMove(SharedVariable sv)
-			{
-				this.moveCache = sv;
-			}
-			public GameState call()
-			{
-				int initialDepth = 3;
-				GameState returnState = new GameState(board, playerTurn, playerPos, aiPos, 0, initialDepth);
-				GameState myState = new GameState(returnState);
-				while (true)
-				{
-					GameState tempState = new GameState(new IsolaAI(moveCache).calculateBestMove(myState, -10000, 10000));
-					if (searchMoves.continueSearch && myState.maxDepth < maxDepth) returnState = new GameState(tempState);
-					else break;
-					System.out.println("Depth: " + myState.maxDepth);
-					myState.maxDepth++;
-				}
-				return returnState;
-			}
-		}
-
+		GameState nextState = new GameState(board, playerOneTurn, playerOnePos, playerTwoPos, 0, 5);
 		final ExecutorService service;
         final Future<GameState> getMove;
         service = Executors.newFixedThreadPool(1);
-        getMove = service.submit(new aiCalculateMove(searchMoves));    
+        getMove = service.submit(new aiCalculateMove());    
 		
 		//Wait for a set time before fetching best result
 		try
 		{
 			Thread.sleep(aiTurnTime);
-			searchMoves.invertBoolean();
+			ai.invertSearchBoolean();
 			nextState = getMove.get();
-			searchMoves.invertBoolean();
+			ai.invertSearchBoolean();
 		}
 		catch(Exception e)
 		{
 			System.out.println("Error Sleeping");
 		}
 
-		long movePos = nextState.aiPos;
+		//Get corresponding move and remove buttons and update
+		long movePos = playerOneTurn ? nextState.playerOnePos : nextState.playerTwoPos;
 		long removePos = nextState.board - board;
 		int removeID = 48 - Long.numberOfLeadingZeros(removePos); 
 		int moveID = 48 - Long.numberOfLeadingZeros(movePos); 
@@ -202,39 +240,53 @@ public class Isola extends JPanel
 		int xRemove = removeID/7;
 		int yRemove = removeID%7;
 
-		boardButtons[xMove][yMove].setText("A");
-		aiButton.setText("");
-		aiButton = boardButtons[xMove][yMove];
-
-		boardButtons[xRemove][yRemove].setBackground(Color.BLACK);
-
 		//Make AI move
-		aiPos = movePos;
+		if (playerOneTurn)
+		{
+			boardButtons[xMove][yMove].setText("P");
+			playerOneButton.setText("");
+			playerOneButton = boardButtons[xMove][yMove];
+			boardButtons[xRemove][yRemove].setBackground(Color.BLACK);
+			playerOnePos = movePos;
+		}
+		else
+		{
+			boardButtons[xMove][yMove].setText("A");
+			playerTwoButton.setText("");
+			playerTwoButton = boardButtons[xMove][yMove];
+			boardButtons[xRemove][yRemove].setBackground(Color.BLACK);
+			playerTwoPos = movePos;
+		}
+
 		board = nextState.board;
-		playerTurn = true;
-		
-		if (GameLogic.gameOver(board, playerPos, aiPos))
+		playerOneTurn = !playerOneTurn;
+
+		if (GameLogic.gameOver(board, playerOnePos, playerTwoPos))
 		{
 			gameOver();
 		}
+
+		if (aiVSai) aiTurn();
 	}
 
 
 	void gameOver()
 	{
-		int winner = GameLogic.gameWinner(board, playerPos, aiPos);
+		int winner = GameLogic.gameWinner(board, playerOnePos, playerTwoPos);
 		int response = -1;
-		if (winner == 1)
+
+		//Get response
+		if (winner == 0) 
 		{
-			response = JOptionPane.showConfirmDialog(null, "Replay?", "You Win!", 1);
+			response = JOptionPane.showConfirmDialog(null, "Replay?", "Draw!", 1);
+		}
+		else if (winner == 1)
+		{
+			response = JOptionPane.showConfirmDialog(null, "Replay?", "Player One Wins!", 1);
 		} 
 		else if (winner == 2) 
 		{
-			response = JOptionPane.showConfirmDialog(null, "Replay?", "You Lose!", 1);
-		}
-		else if (winner == 0 || winner == -1) 
-		{
-			response = JOptionPane.showConfirmDialog(null, "Replay?", "Draw!", 1);
+			response = JOptionPane.showConfirmDialog(null, "Replay?", "Player Two Wins!", 1);
 		}
 		else 
 		{
@@ -242,6 +294,7 @@ public class Isola extends JPanel
 			System.exit(0);
 		}
 		
+		//Handle response
 		if (response == JOptionPane.YES_OPTION)
 		{
 			resetGame();
@@ -250,7 +303,6 @@ public class Isola extends JPanel
 		{
 			System.exit(0);
 		}
-		
 	}
 	
 	void resetGame()
@@ -264,15 +316,15 @@ public class Isola extends JPanel
 				boardButtons[i][j].setBackground(null);
 			}
 		}
-		searchMoves = new SharedVariable(true);
 		boardButtons[0][3].setText("A");
 		boardButtons[6][3].setText("P");
-		aiButton = boardButtons[0][3];
-		playerButton = boardButtons[6][3];
-		playerTurn = true;
+		playerTwoButton = boardButtons[0][3];
+		playerOneButton = boardButtons[6][3];
+		playerOneTurn = true;
 		waitingForMove = true;
 		board = initBoardState;
-		playerPos = playerOneStartPos;
-		aiPos = playerTwoStartPos;
+		playerOnePos = playerOneStartPos;
+		playerTwoPos = playerTwoStartPos;
+		startGame();
 	}
 }

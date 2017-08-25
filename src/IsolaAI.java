@@ -15,13 +15,11 @@ public class IsolaAI
 
 	//Holds all 49 possible square locations
 	long removeLocations[];
+	volatile boolean searchMoves;
 
-	SharedVariable searchMoves;
-
-	IsolaAI(SharedVariable shared)
+	IsolaAI()
 	{
-		searchMoves = shared;
-
+		searchMoves = true;
 		//Fill in all possible 49 coordinates
 		removeLocations = new long[49];
 		for (int i=1; i<8; i++)
@@ -33,11 +31,16 @@ public class IsolaAI
 		}
 	}
 
+	void invertSearchBoolean()
+	{
+		searchMoves = !searchMoves;
+	}
+
 	//Checks whether a remove location is within 2 squares of opponent
-	boolean closeToPlayer(long playerPos, long remove)
+	boolean closeToPlayer(long playerOnePos, long remove)
 	{
 		//Get most significant bits
-		int playerBitVal = 64 - Long.numberOfLeadingZeros(playerPos); 
+		int playerBitVal = 64 - Long.numberOfLeadingZeros(playerOnePos); 
 		int removeBitVal = 64 - Long.numberOfLeadingZeros(remove);
 		
 		int difference = Math.abs(playerBitVal-removeBitVal);
@@ -53,22 +56,16 @@ public class IsolaAI
 	//Min max algorithm using heuristic function with alpha beta pruning
 	GameState calculateBestMove(GameState curState, int alpha, int beta)
 	{
-		//Check if move is already in cache
-		GameState tempState = searchMoves.moveCache.get(curState);
-		if (tempState != null)
-		{
-			return tempState;
-		}
 
 		//Check that we haven't been called to exit early
-		if (searchMoves.continueSearch == false)
+		if (searchMoves == false)
 		{
 			curState.curDepth = curState.maxDepth;
 			return curState;
 		}	
 
-		long curPlayerPos = (curState.playerTurn) ? curState.playerPos : curState.aiPos;
-		long oppPlayerPos = (curState.playerTurn) ? curState.aiPos : curState.playerPos;
+		long curPlayerPos = (curState.playerTurn) ? curState.playerOnePos : curState.playerTwoPos;
+		long oppPlayerPos = (curState.playerTurn) ? curState.playerTwoPos : curState.playerOnePos;
 
 		GameState bestState = new GameState(curState);	
 		bestState.curDepth++;	
@@ -82,19 +79,19 @@ public class IsolaAI
 		for (int j=0; j<49; j++)
 		{
 			long removePos = removeLocations[j];
-			if  ((GameLogic.validRemove(curState.board, removePos, curState.playerPos, curState.aiPos)
+			if  ((GameLogic.validRemove(curState.board, removePos, curState.playerOnePos, curState.playerTwoPos)
 				&& closeToPlayer(oppPlayerPos, removePos))
 				|| (closeToPlayer(oppPlayerPos, removePos) && removePos == curPlayerPos)) //Case where we move and remove previous spot
 			{
 				for (int i=0; i<8; i++)
 				{
 					long move = (i > 3) ? curPlayerPos >>> moveShifts[i] : curPlayerPos << moveShifts[i];
-					if (GameLogic.validMove(curState.board, curState.playerTurn, move, curState.playerPos, curState.aiPos)
+					if (GameLogic.validMove(curState.board, curState.playerTurn, move, curState.playerOnePos, curState.playerTwoPos)
 						&& (move & removePos) == 0)
 					{	
 						GameState copyState = new GameState(curState);
 						copyState = makeMove(copyState, move, removePos);
-						int winVal = GameLogic.gameWinner(copyState.board, copyState.playerPos, copyState.aiPos);
+						int winVal = GameLogic.gameWinner(copyState.board, copyState.playerOnePos, copyState.playerTwoPos);
 						int heuristic = heuristic(copyState, winVal);
 
 						List<GameState> list = moveList.get(heuristic);
@@ -126,7 +123,7 @@ public class IsolaAI
 					while (state.curDepth < state.maxDepth)
 					{
 						state = new GameState(calculateBestMove(state, alpha, beta));
-						winVal = GameLogic.gameWinner(state.board, state.playerPos, state.aiPos);
+						winVal = GameLogic.gameWinner(state.board, state.playerOnePos, state.playerTwoPos);
 						if (winVal != -1) break; //Check if game is over
 					}
 
@@ -144,16 +141,14 @@ public class IsolaAI
 				}
 			}
 		}
-
-		searchMoves.moveCache.put(curState, bestState);
 		return bestState;
 	}
 
 	GameState makeMove(GameState curState, long move, long remove)
 	{
 		curState.board += remove;
-		if (curState.playerTurn) curState.playerPos = move;
-		else curState.aiPos = move;
+		if (curState.playerTurn) curState.playerOnePos = move;
+		else curState.playerTwoPos = move;
 		curState.playerTurn = !curState.playerTurn;
 		curState.curDepth++;
 		return curState;
@@ -170,28 +165,28 @@ public class IsolaAI
 		for (int i=0; i<4; i++)
 		{
 			//Player Moves
-			if (GameLogic.validMove(state.board, true, state.playerPos >>> moveShifts2[i], state.playerPos, state.aiPos)) heuristic-=3;
-			if (GameLogic.validMove(state.board, true, state.playerPos << moveShifts2[i], state.playerPos, state.aiPos)) heuristic-=3;
+			if (GameLogic.validMove(state.board, true, state.playerOnePos >>> moveShifts2[i], state.playerOnePos, state.playerTwoPos)) heuristic-=3;
+			if (GameLogic.validMove(state.board, true, state.playerOnePos << moveShifts2[i], state.playerOnePos, state.playerTwoPos)) heuristic-=3;
 
 			//Ai moves
-			if (GameLogic.validMove(state.board, false, state.aiPos >>> moveShifts2[i], state.playerPos, state.aiPos)) heuristic+=3;		
-			if (GameLogic.validMove(state.board, false, state.aiPos << moveShifts2[i], state.playerPos, state.aiPos)) heuristic+=3;
+			if (GameLogic.validMove(state.board, false, state.playerTwoPos >>> moveShifts2[i], state.playerOnePos, state.playerTwoPos)) heuristic+=3;		
+			if (GameLogic.validMove(state.board, false, state.playerTwoPos << moveShifts2[i], state.playerOnePos, state.playerTwoPos)) heuristic+=3;
 		}
 
 		//Weight possible empty squares within 2 spaces of player and AI
 		for (int i=4; i<12; i++)
 		{
 			//Player 
-			if (GameLogic.validRemove(state.board, state.playerPos >>> moveShifts2[i], state.playerPos, state.aiPos)
-				&& closeToPlayer(state.playerPos, state.playerPos >>> moveShifts2[i])) heuristic--;
-			if (GameLogic.validRemove(state.board, state.playerPos << moveShifts2[i], state.playerPos, state.aiPos)
-				&& closeToPlayer(state.playerPos, state.playerPos >>> moveShifts2[i])) heuristic--;
+			if (GameLogic.validRemove(state.board, state.playerOnePos >>> moveShifts2[i], state.playerOnePos, state.playerTwoPos)
+				&& closeToPlayer(state.playerOnePos, state.playerOnePos >>> moveShifts2[i])) heuristic--;
+			if (GameLogic.validRemove(state.board, state.playerOnePos << moveShifts2[i], state.playerOnePos, state.playerTwoPos)
+				&& closeToPlayer(state.playerOnePos, state.playerOnePos >>> moveShifts2[i])) heuristic--;
 
 			//Ai
-			if (GameLogic.validRemove(state.board, state.aiPos >>> moveShifts2[i], state.playerPos, state.aiPos)
-				&& closeToPlayer(state.aiPos, state.aiPos >>> moveShifts2[i])) heuristic++;		
-			if (GameLogic.validRemove(state.board, state.aiPos << moveShifts2[i], state.playerPos, state.aiPos)
-				&& closeToPlayer(state.aiPos, state.aiPos >>> moveShifts2[i])) heuristic++;
+			if (GameLogic.validRemove(state.board, state.playerTwoPos >>> moveShifts2[i], state.playerOnePos, state.playerTwoPos)
+				&& closeToPlayer(state.playerTwoPos, state.playerTwoPos >>> moveShifts2[i])) heuristic++;		
+			if (GameLogic.validRemove(state.board, state.playerTwoPos << moveShifts2[i], state.playerOnePos, state.playerTwoPos)
+				&& closeToPlayer(state.playerTwoPos, state.playerTwoPos >>> moveShifts2[i])) heuristic++;
 		}
 
 		//Weight a winning board very heavily
