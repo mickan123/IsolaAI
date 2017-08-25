@@ -61,6 +61,7 @@ public class IsolaGUI extends JPanel
 		return -1;
 	}
 	
+	//Gives a choice to the player for game type
 	int gameTypeChoice()
 	{
 		Object[] options = {"Player vs Player", "Player vs AI", "AI vs AI"};
@@ -73,6 +74,7 @@ public class IsolaGUI extends JPanel
 		return choice;
 	}
 
+	//Resets GUI board to default state
 	void resetGUI()
 	{
 		for (int i=0; i<7; i++)
@@ -89,6 +91,7 @@ public class IsolaGUI extends JPanel
 		playerOneButton = boardButtons[6][3];
 	}
 
+	//Updates buttons corresponding to given move/remove
 	void makeMove(boolean playerOneTurn, int xMove, int yMove, int xRemove, int yRemove)
 	{
 		String playerSymbol = playerOneTurn ? "P" : "A";
