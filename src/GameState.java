@@ -8,17 +8,17 @@ public class GameState
 {
 	long board;
 	boolean playerTurn;
-	long playerPos;
-	long aiPos;
+	long playerOnePos;
+	long playerTwoPos;
 	int curDepth;
 	int maxDepth;
 
-	GameState(long board, boolean playerTurn, long playerPos, long aiPos, int depth, int maxDepth)
+	GameState(long board, boolean playerTurn, long playerOnePos, long playerTwoPos, int depth, int maxDepth)
 	{
 		this.board = board;
 		this.playerTurn = playerTurn;
-		this.playerPos = playerPos;
-		this.aiPos = aiPos;
+		this.playerOnePos = playerOnePos;
+		this.playerTwoPos = playerTwoPos;
 		this.curDepth = depth;
 		this.maxDepth = maxDepth;
 	}
@@ -27,8 +27,8 @@ public class GameState
 	{
 		this.board = another.board;
 		this.playerTurn = another.playerTurn;
-		this.playerPos = another.playerPos;
-		this.aiPos = another.aiPos;
+		this.playerOnePos = another.playerOnePos;
+		this.playerTwoPos = another.playerTwoPos;
 		this.curDepth = another.curDepth;
 		this.maxDepth = another.maxDepth;
 	}
@@ -38,8 +38,8 @@ public class GameState
 	{
 		int result = 17;
 		result = 31 * result + Long.hashCode(board);
-		result = 31 * result + Long.hashCode(playerPos);
-		result = 31 * result + Long.hashCode(aiPos);
+		result = 31 * result + Long.hashCode(playerOnePos);
+		result = 31 * result + Long.hashCode(playerTwoPos);
 		result = 31 * result + maxDepth;
 		return result;
 	}
@@ -54,8 +54,8 @@ public class GameState
 
 		return		(this.board == state.board)
         		&&	(this.playerTurn == state.playerTurn)
-        		&&	(this.playerPos == state.playerPos)
-        		&&	(this.aiPos == state.aiPos)
+        		&&	(this.playerOnePos == state.playerOnePos)
+        		&&	(this.playerTwoPos == state.playerTwoPos)
         		&& 	(this.curDepth == state.curDepth);
 	}
 }
