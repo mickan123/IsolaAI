@@ -56,7 +56,6 @@ public class IsolaAI
 	//Min max algorithm using heuristic function with alpha beta pruning
 	GameState calculateBestMove(GameState curState, int alpha, int beta)
 	{
-
 		//Check that we haven't been called to exit early
 		if (searchMoves == false)
 		{

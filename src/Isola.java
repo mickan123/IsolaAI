@@ -6,7 +6,7 @@ import java.awt.event.*;
 import javax.swing.*;
 import java.util.concurrent.*;
 
-public class Isola extends JPanel
+public class Isola
 {
 	final static long initBoardState = 0x0000000000007FFFL;
 	final static long playerOneStartPos = 0x1000000000000000L;
@@ -26,14 +26,13 @@ public class Isola extends JPanel
 	private boolean aiVSai;
 	private boolean playVSplay;
 
-	//AI logic class
-	private IsolaAI ai;	
+	//Keep track of whether moving piece or removing
+	private boolean waitingForMove;
 
-	//GUI variables
-	private JButton boardButtons[][] = new JButton[7][7]; 
-	private JButton playerOneButton;
-	private JButton playerTwoButton;
-	private boolean waitingForMove = true;
+	//AI logic class && gui class
+	private IsolaAI ai;	
+	private IsolaGUI gui;
+
 
 	Isola()
 	{	
@@ -41,23 +40,21 @@ public class Isola extends JPanel
 		aiVSai = false;
 		playVSai = false;
 		playVSplay = false;
-		setLayout(new GridLayout(7,7));
-		setupGUI();
+		waitingForMove = true;
 		ai = new IsolaAI();
+		gui = new IsolaGUI(this);
+		gui.setupGUI();
+		startGame();
 	}
 
 	public void startGame()
 	{
-		Object[] options = {"Player vs Player", "Player vs AI", "AI vs AI"};
-		int choice = JOptionPane.showOptionDialog(null, "Choose a Game Type", "", 
-												JOptionPane.YES_NO_CANCEL_OPTION,
-												JOptionPane.QUESTION_MESSAGE,
-												null, 
-												options, 
-												"Player vs Player");
+		int choice = gui.gameTypeChoice();
+
 		if (choice == 0) playVSplay = true;
 		else if (choice == 1) playVSai = true;
 		else if (choice == 2) aiVSai = true;
+		else System.exit(0);
 
 		if (aiVSai)
 		{
@@ -77,111 +74,8 @@ public class Isola extends JPanel
 
 	public static void main(String[] args)
 	{
-		JFrame mainWindow = new JFrame("Isola");
-		mainWindow.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-		mainWindow.setSize(800,800);
-		mainWindow.setVisible(true);
 		Isola game = new Isola();
-		mainWindow.getContentPane().add(game);
-		game.startGame();
-	}
-
-	void setupGUI()
-	{
-		for (int i=0; i<7; i++)
-		{
-			for (int j=0; j<7; j++)
-			{
-				boardButtons[i][j] = new JButton();
-	            boardButtons[i][j].setText("");
-	            boardButtons[i][j].addActionListener(new boardListener());
-	            add(boardButtons[i][j]);
-			}
-		}
-		boardButtons[0][3].setText("A");
-		boardButtons[6][3].setText("P");
-		playerOneButton = boardButtons[6][3];
-		playerTwoButton = boardButtons[0][3];
-	}
-
-	//Returns the buttonID corresponding to the button object
-	int getButtonID(JButton buttonClicked)
-	{
-		for (int i=0; i<7; i++)
-		{
-			for (int j=0; j<7; j++)
-			{
-				if (buttonClicked == boardButtons[i][j])
-				{
-					return i*7 + j;
-				}
-			}
-		}
-		return -1;
-	}
-
-	private class boardListener implements ActionListener
-	{
-		public void actionPerformed(ActionEvent e)
-		{
-			JButton buttonClicked = (JButton)e.getSource();
-			
-			int buttonID = getButtonID(buttonClicked);
-			long x = buttonID/7 + 1;
-			long y = buttonID%7 + 1;
-			if (waitingForMove && ((playerOneTurn && playVSai) || playVSplay))
-			{
-				long movePos = GameLogic.convertCoords(x, y);
-				if (GameLogic.validMove(board, playerOneTurn, movePos, playerOnePos, playerTwoPos))
-				{
-					if (playerOneTurn)
-					{
-						buttonClicked.setText("P");
-						playerOneButton.setText("");
-						playerOneButton = buttonClicked;
-						playerOnePos = movePos;
-					}
-					else
-					{
-						buttonClicked.setText("A");
-						playerTwoButton.setText("");
-						playerTwoButton = buttonClicked;
-						playerTwoPos = movePos;
-					}
-					waitingForMove = false;
-				} 
-			}
-			else if (!waitingForMove && ((playerOneTurn && playVSai) || playVSplay))
-			{
-				long removePos = GameLogic.convertCoords(x, y);
-				if (GameLogic.validRemove(board, removePos, playerOnePos, playerTwoPos))
-				{
-					buttonClicked.setBackground(Color.BLACK);
-					board += removePos;
-					playerOneTurn = !playerOneTurn;
-					waitingForMove = true;
-					if (GameLogic.gameOver(board, playerOnePos, playerTwoPos))
-					{
-						gameOver();
-					} 
-					else if (playVSai)
-					{
-						//Run AI turn
-						new Thread(new Runnable()
-						{
-							public void run()
-							{
-								long start = System.nanoTime();
-								aiTurn();
-								long end = System.nanoTime();
-								long difference = (end-start)/1000000;
-								System.out.println("Time for move: " + difference + "ms");
-							}
-						}).start();
-					}
-				}
-			}
-		}
+		
 	}
 
 	//Iterative deepening search thread that runs for set time
@@ -241,22 +135,10 @@ public class Isola extends JPanel
 		int yRemove = removeID%7;
 
 		//Make AI move
-		if (playerOneTurn)
-		{
-			boardButtons[xMove][yMove].setText("P");
-			playerOneButton.setText("");
-			playerOneButton = boardButtons[xMove][yMove];
-			boardButtons[xRemove][yRemove].setBackground(Color.BLACK);
-			playerOnePos = movePos;
-		}
-		else
-		{
-			boardButtons[xMove][yMove].setText("A");
-			playerTwoButton.setText("");
-			playerTwoButton = boardButtons[xMove][yMove];
-			boardButtons[xRemove][yRemove].setBackground(Color.BLACK);
-			playerTwoPos = movePos;
-		}
+		gui.makeMove(playerOneTurn, xMove, yMove, xRemove, yRemove);
+
+		if (playerOneTurn) playerOnePos = movePos;
+		else playerTwoPos = movePos;
 
 		board = nextState.board;
 		playerOneTurn = !playerOneTurn;
@@ -265,8 +147,62 @@ public class Isola extends JPanel
 		{
 			gameOver();
 		}
+		else if (aiVSai) aiTurn();
+	}
 
-		if (aiVSai) aiTurn();
+	void buttonPressed(JButton buttonClicked, long x, long y)
+	{
+		//Check if button is appropriate move
+		if (waitingForMove && ((playerOneTurn && playVSai) || playVSplay))
+		{
+			long movePos = GameLogic.convertCoords(x, y);
+			if (GameLogic.validMove(board, playerOneTurn, movePos, playerOnePos, playerTwoPos))
+			{
+				//Update GUI
+				int xMove = (int)x - 1;
+				int yMove = (int)y - 1;
+				gui.makeMove(playerOneTurn, xMove, yMove, -1, -1);
+
+				//Update move
+				if (playerOneTurn) playerOnePos = movePos;
+				else playerTwoPos = movePos;
+				waitingForMove = false;
+			} 
+		}
+
+		//Check if appropriate remove button
+		else if (!waitingForMove && ((playerOneTurn && playVSai) || playVSplay))
+		{
+			long removePos = GameLogic.convertCoords(x, y);
+			if (GameLogic.validRemove(board, removePos, playerOnePos, playerTwoPos))
+			{
+				buttonClicked.setBackground(Color.BLACK);
+				board += removePos;
+				playerOneTurn = !playerOneTurn;
+				waitingForMove = true;
+				if (GameLogic.gameOver(board, playerOnePos, playerTwoPos))
+				{
+					gameOver();
+				} 
+			}
+		}
+
+		//Run AI turn if playerVSai
+		if (playVSai && !playerOneTurn)
+		{
+			
+			new Thread(new Runnable()
+			{
+				public void run()
+				{
+					long start = System.nanoTime();
+					aiTurn();
+					long end = System.nanoTime();
+					long difference = (end-start)/1000000;
+					System.out.println("Time for move: " + difference + "ms");
+				}
+			}).start();
+		}
 	}
 
 
@@ -308,18 +244,7 @@ public class Isola extends JPanel
 	void resetGame()
 	{
 		//Set everything to default
-		for (int i=0; i<7; i++)
-		{
-			for (int j=0; j<7; j++)
-			{
-				boardButtons[i][j].setText("");
-				boardButtons[i][j].setBackground(null);
-			}
-		}
-		boardButtons[0][3].setText("A");
-		boardButtons[6][3].setText("P");
-		playerTwoButton = boardButtons[0][3];
-		playerOneButton = boardButtons[6][3];
+		gui.resetGUI();
 		playerOneTurn = true;
 		waitingForMove = true;
 		board = initBoardState;
